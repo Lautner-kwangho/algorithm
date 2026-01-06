@@ -5,6 +5,7 @@ on:
     paths:
       - '**/*.java'
       - '**/*.py'
+      - '**/*.swift'
 
 jobs:
   notify:
@@ -19,8 +20,8 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
-          # 변경된 파일(.java, .py) 감지
-          git diff --name-only --diff-filter=AM HEAD^ HEAD | grep -E '\.(java|py)$' | while read file; do
+          # 변경된 파일(.java, .py, .swift) 감지
+          git diff --name-only --diff-filter=AM HEAD^ HEAD | grep -E '\.(java|py|swift)$' | while read file; do
             
             problem_title=$(basename $(dirname "$file"))
             ext="${file##*.}"
@@ -29,13 +30,20 @@ jobs:
             code=$(cat "$file" | jq -Rs .)
 
             # Slack 코드블럭 언어 설정
-            if [ "$ext" = "java" ]; then
-              lang="java"
-            elif [ "$ext" = "py" ]; then
-              lang="python"
-            else
-              lang=""
-            fi
+            case "$ext" in
+              java)
+                lang="java"
+                ;;
+              py)
+                lang="python"
+                ;;
+              swift)
+                lang="swift"
+                ;;
+              *)
+                lang=""
+                ;;
+            esac
 
             jq -n \
               --arg title "$problem_title" \
