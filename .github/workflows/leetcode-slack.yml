@@ -1,0 +1,69 @@
+name: LeetCode to Slack
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - '**/*.java'
+      - '**/*.py'
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      
+      - name: Send problems to Slack
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          # 변경된 파일(.java, .py) 감지
+          git diff --name-only --diff-filter=AM HEAD^ HEAD | grep -E '\.(java|py)$' | while read file; do
+            
+            problem_title=$(basename $(dirname "$file"))
+            ext="${file##*.}"
+
+            # 코드 파일 내용 -> JSON safe string
+            code=$(cat "$file" | jq -Rs .)
+
+            # Slack 코드블럭 언어 설정
+            if [ "$ext" = "java" ]; then
+              lang="java"
+            elif [ "$ext" = "py" ]; then
+              lang="python"
+            else
+              lang=""
+            fi
+
+            jq -n \
+              --arg title "$problem_title" \
+              --arg author "${{ github.actor }}" \
+              --arg url "${{ github.event.head_commit.url }}" \
+              --arg lang "$lang" \
+              --argjson code "$code" \
+              '{
+                text: "\($title)",
+                blocks: [
+                  {
+                    type: "header",
+                    text: {type: "plain_text", text: "\($title)"}
+                  },
+                  {
+                    type: "section",
+                    fields: [
+                      {type: "mrkdwn", text: ("*Author:* " + $author)},
+                      {type: "mrkdwn", text: ("<" + $url + "|View>")}
+                    ]
+                  },
+                  {type: "divider"},
+                  {
+                    type: "section",
+                    text: {type: "mrkdwn", text: ("```" + $lang + "\n" + $code + "\n```")}
+                  }
+                ]
+              }' | curl -X POST "$SLACK_WEBHOOK_URL" -H 'Content-Type: application/json' -d @-
+            
+            echo "$problem_title ($file)"
+          done
